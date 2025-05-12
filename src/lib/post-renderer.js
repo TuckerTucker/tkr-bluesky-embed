@@ -114,7 +114,7 @@ class PostRenderer {
 
           // For HLS (m3u8) videos, we use HLS.js to ensure cross-browser compatibility
           mediaHTML += `
-            <div class="bsky-video-container">
+            <div class="bsky-video-container" data-playlist="${playlist}">
               <video
                 id="${videoId}"
                 controls
@@ -122,6 +122,7 @@ class PostRenderer {
                 poster="${thumbnailUrl || ''}"
                 class="bsky-video"
                 style="max-width: 100%; aspect-ratio: ${aspectRatioValue};"
+                data-playlist="${playlist}"
               >
                 Your browser does not support the video tag.
               </video>
@@ -443,7 +444,7 @@ class PostRenderer {
 
             console.log('Rendering record.embed video, videoRendered flag:', this.videoRendered);
             mediaHTML += `
-              <div class="bsky-video-container">
+              <div class="bsky-video-container" data-playlist="${playlistUrl}">
                 <video
                   id="${videoId}"
                   controls
@@ -451,6 +452,7 @@ class PostRenderer {
                   poster="${thumbnailUrl}"
                   class="bsky-video"
                   style="max-width: 100%; aspect-ratio: ${aspectRatioValue};"
+                  data-playlist="${playlistUrl}"
                 >
                   Your browser does not support the video tag.
                 </video>

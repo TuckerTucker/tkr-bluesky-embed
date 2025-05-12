@@ -307,6 +307,9 @@ function generateFeedPageHtml(feedData, options = {}) {
             // Update just the feed content
             document.querySelector('.feed').innerHTML = newFeedContent;
 
+            // Reinitialize HLS video players
+            reinitializeVideoPlayers();
+
             // Update last refresh time
             lastRefreshTime = new Date();
             isRefreshing = false;
@@ -382,6 +385,52 @@ function generateFeedPageHtml(feedData, options = {}) {
 
       // Initial hide of back-to-top button
       document.querySelector('.back-to-top').style.display = 'none';
+
+      // Function to reinitialize video players after refresh
+      function reinitializeVideoPlayers() {
+        console.log("Reinitializing video players");
+        // Find all video elements in the feed
+        const videos = document.querySelectorAll('.feed video');
+
+        videos.forEach(function(video, index) {
+          console.log("Processing video " + index + " with id: " + video.id);
+
+          // Get the playlist URL from the data attribute or a parent element
+          const videoContainer = video.closest('.bsky-video-container');
+          const playlistUrl = video.dataset.playlist || (videoContainer ? videoContainer.dataset.playlist : null);
+
+          if (playlistUrl) {
+            console.log("Found playlist URL: " + playlistUrl);
+
+            // Check if HLS.js is available and supported
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+              console.log("Using HLS.js for video " + index);
+              const hls = new Hls();
+              hls.loadSource(playlistUrl);
+              hls.attachMedia(video);
+              hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                console.log("Video " + index + " ready to play (HLS manifest parsed)");
+                // Explicitly set video to not autoplay
+                video.autoplay = false;
+              });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+              // Native HLS support (Safari)
+              console.log("Using native HLS support for video " + index);
+              video.src = playlistUrl;
+              video.autoplay = false;
+            } else {
+              console.log("HLS is not supported by this browser for video " + index);
+            }
+          } else {
+            console.warn("No playlist URL found for video " + index);
+          }
+        });
+      }
+
+      // Initialize video players on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        reinitializeVideoPlayers();
+      });
     </script>
   </body>
   </html>
