@@ -9,15 +9,19 @@ class FeedFetcher {
 
   // Fetch a user's feed (with caching)
   async getUserFeed(handle, options = {}) {
-    const { limit = 10, cursor = null, cacheKey = null } = options;
+    const { limit = 10, cursor = null, cacheKey = null, skipCache = false } = options;
 
-    // Check cache first if cacheKey is provided
-    if (cacheKey && cache.enabled) {
+    // Check cache first if cacheKey is provided and skipCache is false
+    if (cacheKey && cache.enabled && !skipCache) {
       const cachedFeed = cache.get(`feed:${handle}:${cacheKey}`);
       if (cachedFeed) {
         console.log(`Using cached feed for ${handle}`);
         return cachedFeed;
       }
+    }
+
+    if (skipCache) {
+      console.log(`Cache bypass requested for feed: ${handle}`);
     }
 
     try {
@@ -138,7 +142,8 @@ class FeedFetcher {
       limit = 10,
       cursor = null,
       theme = 'light',
-      userPostsOnly = false // Option to show only posts from the user
+      userPostsOnly = false, // Option to show only posts from the user
+      skipCache = false // Option to bypass cache for this request
     } = options;
 
     try {
@@ -153,17 +158,22 @@ class FeedFetcher {
 
         // Check cache with a unique key for user posts
         const cacheKey = `user-posts:${handle}:${limit}:${cursor}:${theme}`;
-        if (cache.enabled) {
+        if (cache.enabled && !skipCache) {
           const cachedData = cache.get(cacheKey);
           if (cachedData) {
-            console.log(`Using cached user posts for ${handle}`);
+            console.log(`Using cached user posts for ${handle}, cache key: ${cacheKey}`);
             feedData = cachedData;
           } else {
             // Fetch and cache
             try {
-              feedData = await this.client.getUserPosts(handle, limit, cursor);
+              console.log(`Cache miss or forced refresh for user posts, fetching from API`);
+              feedData = await this.client.getUserPosts(handle, limit, cursor, skipCache);
+              console.log(`Got ${feedData?.feed?.length || 0} posts from API for ${handle} (skipCache=${skipCache})`);
               if (feedData) {
-                cache.put(cacheKey, feedData);
+                // Use shorter cache duration for feeds (1 minute for testing)
+                const cacheDuration = 1 * 60 * 1000; // 1 minute for testing
+                console.log(`Caching ${feedData?.feed?.length || 0} posts with key ${cacheKey} for ${cacheDuration}ms`);
+                cache.put(cacheKey, feedData, cacheDuration);
               }
             } catch (error) {
               console.error(`Error fetching user posts: ${error.message}`);
@@ -171,7 +181,11 @@ class FeedFetcher {
             }
           }
         } else {
-          feedData = await this.client.getUserPosts(handle, limit, cursor);
+          if (skipCache) {
+            console.log(`Cache bypass requested for user posts, fetching from API`);
+          }
+          feedData = await this.client.getUserPosts(handle, limit, cursor, true); // Always skip cache
+          console.log(`[FRESH] Got ${feedData?.feed?.length || 0} posts from API for ${handle} (skipCache=true)`);
         }
       } else {
         // For regular feed view, use the standard method
@@ -179,7 +193,8 @@ class FeedFetcher {
         feedData = await this.getUserFeed(handle, {
           limit,
           cursor,
-          cacheKey: `feed:${limit}:${cursor}:${theme}`
+          cacheKey: `feed:${limit}:${cursor}:${theme}`,
+          skipCache: skipCache // Pass the skipCache option to getUserFeed
         });
       }
 

@@ -489,6 +489,14 @@ app.get('/feed', cache.middleware(), async (req, res) => {
     const cursor = req.query.cursor || null;
     const skipReplies = req.query.skipReplies !== 'false';
     const skipReposts = req.query.skipReposts !== 'false';
+    const forceRefresh = Boolean(req.query._nocache) || req.query._refresh === 'true';
+    console.log(`Feed request with forceRefresh=${forceRefresh}, query params:`, req.query);
+
+    // Clear cache when a refresh is forced - guarantees fresh content from API
+    if (forceRefresh) {
+      console.log('Forced refresh requested - clearing cache for ' + handle);
+      cache.clear(); // Clear all caches to ensure completely fresh content
+    }
 
     // Validate handle
     if (!handle || handle.trim() === '') {
@@ -506,7 +514,8 @@ app.get('/feed', cache.middleware(), async (req, res) => {
         cursor,
         theme,
         skipReplies,
-        skipReposts
+        skipReposts,
+        skipCache: forceRefresh // Pass the refresh flag to skip cache
       });
     } catch (feedError) {
       console.error('Primary feed fetch error:', feedError);
@@ -528,14 +537,16 @@ app.get('/feed', cache.middleware(), async (req, res) => {
       }
     }
 
-    // Generate the HTML for the feed page
+    // Generate the HTML for the feed page with refresh timestamp
+    const refreshTime = new Date().toISOString();
     const html = generateFeedPageHtml(feedData, {
       handle,
       theme,
       title: `Bluesky Feed: @${handle}`,
       cursor: feedData.cursor,
       suggestedUsers,
-      pageType: 'feed' // General feed indicator
+      pageType: 'feed', // General feed indicator
+      refreshTime: refreshTime // Add timestamp for tracking API refresh
     });
 
     res.send(html);
@@ -672,6 +683,9 @@ app.post('/api/post/create', async (req, res) => {
       const result = await blueskyClient.createPost(req.body.text);
       console.log('Post created successfully:', result);
 
+      // Clear any caches related to feeds to ensure the new post appears
+      cache.delete(`feed:${blueskyClient.username}:*`);
+
       // Return success response with post URI
       res.json({
         success: true,
@@ -693,6 +707,57 @@ app.post('/api/post/create', async (req, res) => {
   } catch (error) {
     console.error('API error creating post:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Test endpoint to create a test post (for live feed demo)
+app.get('/api/test/create-post', async (req, res) => {
+  try {
+    // Create a timestamp for uniqueness
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const testText = `Test post for live feed demo ${timestamp}`;
+
+    console.log(`Creating test post: ${testText}`);
+
+    try {
+      const result = await blueskyClient.createPost(testText);
+
+      // Clear caches to ensure feed is refreshed
+      console.log('Clearing feed caches to ensure test post appears immediately');
+      cache.clear(); // Clear all caches for simplicity
+
+      // Return success message
+      res.send(`
+        <html>
+          <body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h2>Test Post Created</h2>
+            <p>Created post with text: "${testText}"</p>
+            <p>This post should appear in your feed when you refresh.</p>
+            <p><a href="/feed">Go to Feed</a></p>
+            <script>
+              // Automatically redirect back to feed after 2 seconds
+              setTimeout(function() {
+                window.location.href = '/feed';
+              }, 2000);
+            </script>
+          </body>
+        </html>
+      `);
+    } catch (postError) {
+      console.error('Error creating test post:', postError);
+      res.status(500).send(`
+        <html>
+          <body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h2>Error Creating Test Post</h2>
+            <p>Error: ${postError.message}</p>
+            <p><a href="/feed">Go back to Feed</a></p>
+          </body>
+        </html>
+      `);
+    }
+  } catch (error) {
+    console.error('API error creating test post:', error);
+    res.status(500).send('Error creating test post: ' + error.message);
   }
 });
 

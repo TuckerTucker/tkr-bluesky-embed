@@ -212,7 +212,10 @@ class BlueskyClient {
   }
 
   // Get a user's feed with the new API format
-  async getUserFeed(handle, limit = 20, cursor = null) {
+  async getUserFeed(handle, limit = 20, cursor = null, skipCache = false) {
+    const requestTime = new Date().toISOString().substring(11, 19); // HH:MM:SS
+    console.log(`[${requestTime}] Fetching feed for ${handle}, skipCache=${skipCache}`);
+    
     try {
       // Ensure we're authenticated
       const authenticated = await this.authenticate();
@@ -412,7 +415,9 @@ class BlueskyClient {
   }
 
   // Get only posts authored by a specific user (no reposts, no mentions)
-  async getUserPosts(handle, limit = 20, cursor = null) {
+  async getUserPosts(handle, limit = 20, cursor = null, skipCache = false) {
+    const requestTime = new Date().toISOString().substring(11, 19); // HH:MM:SS
+    console.log(`[${requestTime}] Fetching user posts for ${handle}, skipCache=${skipCache}`);
     try {
       // Ensure we're authenticated for better rate limits
       const authenticated = await this.authenticate();

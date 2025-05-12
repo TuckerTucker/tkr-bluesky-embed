@@ -8,6 +8,8 @@ A simplified, single-user application for embedding Bluesky posts on your websit
 - Custom Web Component for client-side embedding
 - Dark and light theme support
 - Responsive design
+- Full media support (images and videos)
+- HLS video playback with proper aspect ratio
 - Caching to reduce API calls
 - No WordPress or oEmbed dependencies
 
@@ -128,6 +130,17 @@ This application uses the Bluesky/AT Protocol API version 0.15.6. It includes sp
 - Required `actor` parameter in API requests
 - Updated response formats
 - Proper error handling for API responses
+- Full support for image and video embedding
+- Video playback using HLS (HTTP Live Streaming)
+
+### Media Support
+
+The embed supports all media types from Bluesky posts:
+
+- **Images**: Displays with proper aspect ratios, alt text, and responsive layouts for multiple images
+- **Videos**: Plays using HLS.js for cross-browser compatibility, preserves aspect ratios, and provides fallbacks
+- **External Links**: Renders as rich preview cards with thumbnails when available
+- **Quote Posts**: Properly formats and displays nested posts
 
 ## Troubleshooting
 
@@ -151,7 +164,15 @@ If you encounter issues:
 - For feed issues, try viewing a single post to confirm basic connectivity
 - Enable authentication for better performance and access to more posts
 
-### 4. Custom Domain Handles
+### 4. Video Playback Issues
+
+- Videos use HLS.js for playback, which requires JavaScript to be enabled
+- For Safari users, native HLS support is used instead of HLS.js
+- Ensure the browser supports video playback (HLS or HTML5 video)
+- If videos don't appear, check your network connectivity and browser console for errors
+- Video autoplay is intentionally disabled for better user experience
+
+### 5. Custom Domain Handles
 
 Custom domain handles (like @tucker.sh) are fully supported:
 - In the .env file, enter only the domain without the @ symbol
