@@ -58,6 +58,7 @@ function generateFeedPageHtml(feedData, options = {}) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/img/favicon.png" type="image/png">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12"></script>
     <title>${title}</title>
     <style>
       * {

@@ -4,6 +4,7 @@ class PostRenderer {
   constructor() {
     this.defaultTheme = config.styling.defaultTheme;
     this.defaultWidth = config.styling.defaultWidth;
+    this.videoRendered = false;
   }
 
   // Format post text with links and mentions
@@ -90,8 +91,118 @@ class PostRenderer {
         }
       }
 
+      // Reset the video rendering flag at the start of generating media HTML
+      this.videoRendered = false;
+
+      // Handle videos in the #view format (API v0.15.6+)
+      if (post.embed && post.embed.$type === 'app.bsky.embed.video#view') {
+        console.log('Processing video embed:', JSON.stringify(post.embed));
+        console.log('Current videoRendered state:', this.videoRendered);
+
+        // From the logs we can see Bluesky videos have playlist (m3u8) and thumbnail URLs
+        const playlist = post.embed.playlist || '';
+        const thumbnailUrl = post.embed.thumbnail || '';
+        const aspectRatio = post.embed.aspectRatio || { width: 16, height: 9 };
+
+        // Calculate appropriate aspect ratio CSS
+        const aspectRatioValue = aspectRatio.width / aspectRatio.height;
+        const paddingTop = (aspectRatio.height / aspectRatio.width) * 100;
+
+        if (playlist) {
+          // Create a unique ID for this video player
+          const videoId = `bsky-video-${post.cid || Math.random().toString(36).substring(2, 10)}`;
+
+          // For HLS (m3u8) videos, we use HLS.js to ensure cross-browser compatibility
+          mediaHTML += `
+            <div class="bsky-video-container">
+              <video
+                id="${videoId}"
+                controls
+                preload="metadata"
+                poster="${thumbnailUrl || ''}"
+                class="bsky-video"
+                style="max-width: 100%; aspect-ratio: ${aspectRatioValue};"
+              >
+                Your browser does not support the video tag.
+              </video>
+              <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                  const video = document.getElementById('${videoId}');
+                  if (video) {
+                    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                      console.log('Using HLS.js to play video');
+                      const hls = new Hls();
+                      hls.loadSource('${playlist}');
+                      hls.attachMedia(video);
+                      hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        // Video is ready to play but won't autoplay (user must click play)
+                        console.log('Video ready to play (HLS manifest parsed)');
+                        // Explicitly set video to not autoplay
+                        video.autoplay = false;
+                      });
+                    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                      // Native HLS support (Safari)
+                      console.log('Using native HLS support');
+                      video.src = '${playlist}';
+                      // Make sure autoplay is disabled for Safari too
+                      video.autoplay = false;
+                    } else {
+                      console.log('HLS is not supported by this browser');
+                    }
+                  }
+                });
+              </script>
+            </div>
+          `;
+
+          // Set flag to indicate we've already rendered a video for this post
+          this.videoRendered = true;
+        } else if (thumbnailUrl) {
+          // If only thumbnail is available, show it with a play button overlay
+          mediaHTML += `
+            <div class="bsky-video-container">
+              <div class="bsky-thumbnail-container" style="aspect-ratio: ${aspectRatioValue};">
+                <img
+                  src="${thumbnailUrl}"
+                  alt="Video thumbnail"
+                  class="bsky-image"
+                >
+                <div class="bsky-play-button">▶</div>
+              </div>
+            </div>
+          `;
+
+          // Set flag for thumbnail too
+          this.videoRendered = true;
+        }
+      }
+
+      // Handle external links in the #view format (API v0.15.6+)
+      else if (post.embed && post.embed.$type === 'app.bsky.embed.external#view') {
+        console.log('Processing external embed:', JSON.stringify(post.embed));
+
+        const external = post.embed.external || {};
+        const thumb = external.thumb;
+        const title = external.title || '';
+        const description = external.description || '';
+        const uri = external.uri || '';
+
+        if (uri) {
+          mediaHTML += `
+            <div class="bsky-card">
+              ${thumb ? `<img src="${thumb}" alt="${title}" class="bsky-card-image" loading="lazy">` : ''}
+              <div class="bsky-card-content">
+                <div class="bsky-card-title">${title}</div>
+                ${description ? `<div class="bsky-card-description">${description}</div>` : ''}
+                <a href="${uri}" target="_blank" rel="noopener noreferrer" class="bsky-card-link">${uri}</a>
+              </div>
+            </div>
+          `;
+        }
+      }
+
       // Handle images in the newer #view format (API v0.15.6+)
-      if (post.embed && post.embed.$type === 'app.bsky.embed.images#view') {
+      else if (post.embed && post.embed.$type === 'app.bsky.embed.images#view') {
         mediaHTML += '<div class="bsky-images">';
 
         post.embed.images.forEach(image => {
@@ -297,8 +408,136 @@ class PostRenderer {
       if (post.record && post.record.embed) {
         console.log('Found media in post.record.embed with type:', post.record.embed.$type);
 
+        // Handle videos in record.embed
+        if (post.record.embed.$type === 'app.bsky.embed.video' && !this.videoRendered) {
+          console.log('Video record embed details:', JSON.stringify(post.record.embed));
+          console.log('Checking videoRendered flag before rendering record.embed video:', this.videoRendered);
+
+          // For videos in the record embed, we need to extract references based on log findings
+          const cid = post.cid || (post.record?.embed?.video?.ref?.$link);
+          const did = post.author?.did || '';
+
+          // Construct video URLs based on known Bluesky patterns
+          let playlistUrl = '';
+          let thumbnailUrl = '';
+
+          if (cid && did) {
+            // Format based on Bluesky's pattern seen in logs
+            playlistUrl = `https://video.bsky.app/watch/${encodeURIComponent(did)}/${cid}/playlist.m3u8`;
+            thumbnailUrl = `https://video.bsky.app/watch/${encodeURIComponent(did)}/${cid}/thumbnail.jpg`;
+            console.log(`Constructed video URLs: playlist=${playlistUrl}, thumbnail=${thumbnailUrl}`);
+          }
+
+          // Check if we have aspect ratio information
+          let aspectRatio = { width: 16, height: 9 };
+          if (post.record.embed.video?.aspectRatio) {
+            aspectRatio = post.record.embed.video.aspectRatio;
+          }
+
+          // Calculate appropriate aspect ratio values
+          const aspectRatioValue = aspectRatio.width / aspectRatio.height;
+
+          if (playlistUrl && !this.videoRendered) {
+            // Create a unique ID for this video player
+            const videoId = `bsky-video-record-${post.cid || Math.random().toString(36).substring(2, 10)}`;
+
+            console.log('Rendering record.embed video, videoRendered flag:', this.videoRendered);
+            mediaHTML += `
+              <div class="bsky-video-container">
+                <video
+                  id="${videoId}"
+                  controls
+                  preload="metadata"
+                  poster="${thumbnailUrl}"
+                  class="bsky-video"
+                  style="max-width: 100%; aspect-ratio: ${aspectRatioValue};"
+                >
+                  Your browser does not support the video tag.
+                </video>
+                <script>
+                  document.addEventListener('DOMContentLoaded', function() {
+                    const video = document.getElementById('${videoId}');
+                    if (video) {
+                      if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                        console.log('Using HLS.js to play record.embed video');
+                        const hls = new Hls();
+                        hls.loadSource('${playlistUrl}');
+                        hls.attachMedia(video);
+                        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                          // Video is ready to play but won't autoplay (user must click play)
+                          console.log('Video ready to play (HLS manifest parsed)');
+                          // Explicitly set video to not autoplay
+                          video.autoplay = false;
+                        });
+                      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                        // Native HLS support (Safari)
+                        console.log('Using native HLS support');
+                        video.src = '${playlistUrl}';
+                        // Make sure autoplay is disabled for Safari too
+                        video.autoplay = false;
+                      } else {
+                        console.log('HLS is not supported by this browser');
+                      }
+                    }
+                  });
+                </script>
+              </div>
+            `;
+
+            // Set flag to indicate we've rendered a video
+            this.videoRendered = true;
+          } else if (thumbnailUrl && !this.videoRendered) {
+            // If only thumbnail is available, show it with a play button overlay
+            console.log('Rendering record.embed thumbnail, videoRendered flag:', this.videoRendered);
+            mediaHTML += `
+              <div class="bsky-video-container">
+                <div class="bsky-thumbnail-container" style="aspect-ratio: ${aspectRatioValue};">
+                  <img
+                    src="${thumbnailUrl}"
+                    alt="Video thumbnail"
+                    class="bsky-image"
+                  >
+                  <div class="bsky-play-button">▶</div>
+                </div>
+              </div>
+            `;
+            // Set the videoRendered flag to true after rendering a record.embed video thumbnail
+            this.videoRendered = true;
+          }
+        }
+
+        // Handle external links in record.embed
+        else if (post.record.embed.$type === 'app.bsky.embed.external') {
+          let uri = '';
+          let title = '';
+          let description = '';
+          let thumbnailUrl = '';
+
+          // Try to find link data in different possible locations
+          if (post.record.embed.external) {
+            const external = post.record.embed.external;
+            uri = external.uri || '';
+            title = external.title || '';
+            description = external.description || '';
+            thumbnailUrl = external.thumb || '';
+          }
+
+          if (uri) {
+            mediaHTML += `
+              <div class="bsky-card">
+                ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="${title}" class="bsky-card-image" loading="lazy">` : ''}
+                <div class="bsky-card-content">
+                  <div class="bsky-card-title">${title}</div>
+                  ${description ? `<div class="bsky-card-description">${description}</div>` : ''}
+                  <a href="${uri}" target="_blank" rel="noopener noreferrer" class="bsky-card-link">${uri}</a>
+                </div>
+              </div>
+            `;
+          }
+        }
+
         // Handle images in record.embed for the newest API format
-        if (post.record.embed.$type === 'app.bsky.embed.images#main') {
+        else if (post.record.embed.$type === 'app.bsky.embed.images#main') {
           mediaHTML += '<div class="bsky-images">';
 
           // In the #main format, need to look for blob references
@@ -515,11 +754,45 @@ class PostRenderer {
       }
 
       /* Media display - updated for better image rendering */
-      .bsky-images {
+      /* Media containers */
+      .bsky-images,
+      .bsky-video-container {
         display: grid;
         gap: 8px;
         margin-bottom: 12px;
         width: 100%;
+      }
+
+      .bsky-video {
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+        background-color: #000;
+        max-height: 600px;
+      }
+
+      .bsky-thumbnail-container {
+        position: relative;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .bsky-play-button {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        cursor: pointer;
       }
 
       /* Single image layout */
@@ -807,6 +1080,10 @@ class PostRenderer {
         }
       }
 
+      // Check if post contains a video that needs HLS.js support
+      const hasVideo = post.embed?.$type === 'app.bsky.embed.video#view' ||
+                      post.record?.embed?.$type === 'app.bsky.embed.video';
+
       return `
         <!DOCTYPE html>
         <html>
@@ -825,6 +1102,7 @@ class PostRenderer {
             `<meta property="og:image" content="${post.author.avatar}">` :
             ''
           }
+          ${hasVideo ? '<script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12"></script>' : ''}
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
