@@ -47,34 +47,8 @@ function generateFeedPageHtml(feedData, options = {}) {
     `;
   }
   
-  // Build the suggested users section
+  // Suggested users section removed
   let suggestedUsersHtml = '';
-  if (suggestedUsers && suggestedUsers.length > 0) {
-    const usersList = suggestedUsers.map(user => {
-      return `
-        <div class="suggested-user" style="display: flex; align-items: center; margin-bottom: 12px; padding: 8px; border-radius: 8px; background-color: ${isDark ? '#192734' : '#ffffff'};">
-          <img src="${user.avatar || 'https://bsky.app/static/img/default-avatar.png'}" 
-               alt="${user.displayName || user.handle}" 
-               style="width: 40px; height: 40px; border-radius: 50%; margin-right: 10px;">
-          <div style="flex: 1;">
-            <div style="font-weight: bold; color: ${textColor};">${user.displayName || ''}</div>
-            <div style="color: ${secondaryColor}; font-size: 14px;">@${user.handle}</div>
-          </div>
-          <a href="https://bsky.app/profile/${user.handle}" target="_blank" 
-             style="text-decoration: none; padding: 6px 12px; background-color: ${linkColor}; color: white; border-radius: 18px; font-size: 14px;">
-            View
-          </a>
-        </div>
-      `;
-    }).join('\n');
-    
-    suggestedUsersHtml = `
-      <div class="suggested-users-section" style="margin-top: 20px; padding: 15px; background-color: ${isDark ? '#192734' : '#ffffff'}; border-radius: 12px; border: 1px solid ${borderColor};">
-        <h3 style="margin-top: 0; color: ${textColor};">Suggested Profiles</h3>
-        ${usersList}
-      </div>
-    `;
-  }
   
   // Build the HTML page
   return `
@@ -83,6 +57,7 @@ function generateFeedPageHtml(feedData, options = {}) {
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/img/favicon.png" type="image/png">
     <title>${title}</title>
     <style>
       * {
@@ -211,9 +186,9 @@ function generateFeedPageHtml(feedData, options = {}) {
 
         ${profile && pageType === 'user-posts' ? `
         <div class="user-profile" style="display: flex; align-items: center; margin: 15px 0; padding: 12px; background-color: ${isDark ? '#192734' : '#ffffff'}; border-radius: 12px; border: 1px solid ${borderColor};">
-          <img src="${profile.avatar || 'https://bsky.app/static/img/default-avatar.png'}"
+          <img src="${profile.avatar || '/img/default-avatar.svg'}"
                alt="${profile.displayName || profile.handle}"
-               style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px;">
+               style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; object-fit: cover;">
           <div style="flex: 1;">
             <div style="font-weight: bold; font-size: 18px; color: ${textColor};">${profile.displayName || handle}</div>
             <div style="color: ${secondaryColor}; font-size: 14px; margin-bottom: 5px;">@${handle}</div>
@@ -226,19 +201,14 @@ function generateFeedPageHtml(feedData, options = {}) {
     </div>
   
     <div class="container">
-      <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
-        <div class="feed">
-          ${postsHtml}
+      <div class="feed" style="width: 100%;">
+        ${postsHtml}
 
-          ${cursor ? `
-            <a href="/${pageType}?handle=${handle}&theme=${theme}&cursor=${encodeURIComponent(cursor)}" class="load-more-btn">
-              Load More Posts
-            </a>
-          ` : ''}
-        </div>
-        <div class="sidebar">
-          ${suggestedUsersHtml}
-        </div>
+        ${cursor ? `
+          <a href="/${pageType}?handle=${handle}&theme=${theme}&cursor=${encodeURIComponent(cursor)}" class="load-more-btn">
+            Load More Posts
+          </a>
+        ` : ''}
       </div>
     </div>
     

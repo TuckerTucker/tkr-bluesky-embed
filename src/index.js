@@ -272,6 +272,7 @@ app.get('/', (req, res) => {
       <title>Bluesky Embed - Single User Tool</title>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="icon" href="/img/favicon.png" type="image/png">
       <style>
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -493,14 +494,8 @@ app.get('/feed', cache.middleware(), async (req, res) => {
       throw new Error('Please provide a valid Bluesky username');
     }
 
-    // Get suggested users to follow (do this first, as it's less critical)
-    let suggestedUsers = [];
-    try {
-      suggestedUsers = await feedFetcher.getPopularProfiles(5);
-    } catch (suggestedError) {
-      console.warn('Could not fetch suggested users:', suggestedError);
-      // Non-critical error, continue with empty suggestions
-    }
+    // Suggested users section removed
+    const suggestedUsers = [];
 
     // Fetch the user's feed and render it (with retry)
     let feedData;
@@ -575,6 +570,7 @@ function sendErrorResponse(res, error, theme, handle) {
       <title>Error Loading Bluesky Content</title>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="icon" href="/img/favicon.png" type="image/png">
       <style>
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;

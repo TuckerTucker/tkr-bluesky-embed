@@ -296,15 +296,15 @@ class FeedFetcher {
       await this.client.authenticate();
 
       // Use a fixed list of VALID Bluesky accounts for reliability
-      // These are actual user handles that exist on Bluesky
+      // These are proper domain-style handles that should work with the API
       const recommendedHandles = [
-        'bsky.app.bsky.social',     // Official Bluesky app account
-        'skyline.bsky.social',      // Bluesky's Skyline feature
-        'bluesky.bsky.social',      // Official Bluesky account
-        'whyp.bsky.social',         // Popular Bluesky account
-        'elonmusk.bsky.social',     // High-profile account
-        'protocol.bsky.social',     // AT Protocol account
-        'tucker.sh'                 // Example custom domain (if available)
+        'bsky.social',           // Main Bluesky domain
+        'bsky.team',             // Bluesky team members
+        'example.com',           // Example user
+        'atproto.com',           // AT Protocol
+        'tkr.social',            // Sample handle
+        'tucker.sh',             // Example custom domain (if available)
+        'jay.bsky.team'          // Bluesky CEO
       ];
 
       console.log('Fetching popular profiles from recommended handles');
@@ -312,7 +312,46 @@ class FeedFetcher {
       // Fetch profiles from the recommended handles list
       const profiles = [];
 
-      for (const handle of recommendedHandles.slice(0, limit)) {
+      // If this is our configured user, add it to suggestions
+      if (this.client.username) {
+        try {
+          // Use cached data if available for the current user
+          profiles.push({
+            did: this.client.did || '',
+            handle: this.client.username,
+            displayName: 'Your Account',
+            avatar: '/img/default-avatar.png',
+            description: 'Your Bluesky account'
+          });
+        } catch (error) {
+          console.warn(`Couldn't add current user to suggestions:`, error.message);
+        }
+      }
+
+      // Add some hardcoded fallback profiles in case API calls fail
+      const fallbackProfiles = [
+        {
+          did: 'did:plc:z72i7hdynmk6r22z27h6tvur',
+          handle: 'bsky.app',
+          displayName: 'Bluesky',
+          avatar: '/img/default-avatar.png',
+          description: 'The Bluesky app'
+        },
+        {
+          did: 'did:plc:ewvi7nxzyoun6zhxrhs64oiz',
+          handle: 'jay.bsky.team',
+          displayName: 'Jay Graber',
+          avatar: '/img/default-avatar.png',
+          description: 'CEO at Bluesky'
+        }
+      ];
+
+      // Try up to 3 from API, then add fallbacks
+      let fetchedProfiles = 0;
+      for (const handle of recommendedHandles) {
+        // Only try to fetch up to 3 profiles from API to avoid rate limiting
+        if (fetchedProfiles >= 3) break;
+
         try {
           console.log(`Trying to fetch profile for: ${handle}`);
           // Use the client's getProfile method which already handles the proper API format
@@ -320,20 +359,44 @@ class FeedFetcher {
 
           profiles.push(profile);
           console.log(`Successfully fetched profile for ${handle}`);
+          fetchedProfiles++;
 
           // Avoid hitting rate limits
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 500));
         } catch (profileError) {
           console.warn(`Couldn't fetch profile for ${handle}:`, profileError.message);
           // Continue with next handle
         }
       }
 
+      // Add fallback profiles if we need more
+      if (profiles.length < limit) {
+        const neededFallbacks = Math.min(fallbackProfiles.length, limit - profiles.length);
+        profiles.push(...fallbackProfiles.slice(0, neededFallbacks));
+      }
+
       console.log(`Retrieved ${profiles.length} popular profiles`);
-      return profiles;
+      return profiles.slice(0, limit);
     } catch (error) {
       console.error('Error fetching popular profiles:', error);
-      return [];
+
+      // Return static fallbacks if all else fails
+      return [
+        {
+          did: 'did:plc:ewvi7nxzyoun6zhxrhs64oiz',
+          handle: 'jay.bsky.team',
+          displayName: 'Jay Graber',
+          avatar: '/img/default-avatar.png',
+          description: 'CEO at Bluesky'
+        },
+        {
+          did: 'did:plc:z72i7hdynmk6r22z27h6tvur',
+          handle: 'bsky.app',
+          displayName: 'Bluesky',
+          avatar: '/img/default-avatar.png',
+          description: 'The Bluesky app'
+        }
+      ];
     }
   }
 }

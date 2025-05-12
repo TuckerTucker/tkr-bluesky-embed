@@ -34,21 +34,137 @@ class PostRenderer {
 
     // Check for embedded content based on new API format
     try {
-      // Handle images in the new format
-      if (post.embed && post.embed.$type === 'app.bsky.embed.images') {
+      // Debug log to check what content is available
+      console.log('Processing post for media, embed type:', post.embed?.$type);
+
+      // Log the record structure for debugging
+      if (post.record && post.record.embed) {
+        console.log('Record embed structure:', {
+          type: post.record.embed.$type,
+          hasImages: post.record.embed.images ? post.record.embed.images.length : 0
+        });
+
+        // Inspect image URLs for debugging
+        if (post.record.embed.images && Array.isArray(post.record.embed.images)) {
+          post.record.embed.images.forEach((img, i) => {
+            console.log(`Image ${i} URLs:`, {
+              fullsize: img.fullsize,
+              thumb: img.thumb,
+              alt: img.alt,
+              imageUrl: img.image?.url,
+              blob: img.blob,
+              ref: img.ref,
+              type: typeof img
+            });
+
+            // Deep inspection if needed
+            console.log(`Image ${i} full object:`, JSON.stringify(img));
+          });
+        }
+      }
+
+      // Inspect the main post object to find image references
+      console.log('Post embed type:', post.embed?.$type);
+      if (post.embed?.$type === 'app.bsky.embed.images#view') {
+        console.log('Images view data:', JSON.stringify(post.embed.images));
+      }
+
+      // Look for blob data in the post
+      if (post.blobs && Array.isArray(post.blobs)) {
+        console.log('Post has blobs:', post.blobs.length);
+        post.blobs.forEach((blob, i) => {
+          console.log(`Blob ${i}:`, {
+            type: blob.$type,
+            ref: blob.ref,
+            mimeType: blob.mimeType
+          });
+        });
+      }
+
+      // Direct dump of relevant keys for debugging
+      console.log('Post keys at top level:', Object.keys(post));
+      if (post.record) {
+        console.log('Record keys:', Object.keys(post.record));
+        if (post.record.embed) {
+          console.log('Record embed type:', post.record.embed.$type);
+        }
+      }
+
+      // Handle images in the newer #view format (API v0.15.6+)
+      if (post.embed && post.embed.$type === 'app.bsky.embed.images#view') {
         mediaHTML += '<div class="bsky-images">';
 
         post.embed.images.forEach(image => {
-          mediaHTML += `
-            <div class="bsky-image-container">
-              <img
-                src="${image.fullsize || image.thumb}"
-                alt="${image.alt || ''}"
-                class="bsky-image"
-              >
-              ${image.alt ? `<div class="bsky-image-alt">${image.alt}</div>` : ''}
-            </div>
-          `;
+          // In the #view format, image URLs are in .thumb and .fullsize directly
+          let imageUrl = image.fullsize || image.thumb || '';
+          console.log('Using #view format image URL:', imageUrl);
+
+          if (imageUrl) {
+            // Get aspect ratio if available
+            const aspectRatio = image.aspectRatio || null;
+            let style = '';
+
+            if (aspectRatio) {
+              console.log(`Image has aspect ratio: ${aspectRatio.width}x${aspectRatio.height}`);
+              const aspectRatioValue = aspectRatio.width / aspectRatio.height;
+              style = `style="max-width: min(100%, ${aspectRatio.width}px);"`;
+            }
+
+            mediaHTML += `
+              <div class="bsky-image-container">
+                <img
+                  src="${imageUrl}"
+                  alt="${image.alt || ''}"
+                  class="bsky-image"
+                  loading="lazy"
+                  onerror="console.error('Failed to load image:', this.src)"
+                  ${style}
+                >
+                ${image.alt ? `<div class="bsky-image-alt">${image.alt}</div>` : ''}
+              </div>
+            `;
+          }
+        });
+
+        mediaHTML += '</div>';
+      }
+
+      // Handle images in the older format
+      else if (post.embed && post.embed.$type === 'app.bsky.embed.images') {
+        mediaHTML += '<div class="bsky-images">';
+
+        post.embed.images.forEach(image => {
+          // Ensure we have the right image URL by checking all possible locations
+          let imageUrl = '';
+
+          // Latest API puts image URL in image.image.url
+          if (image.image && image.image.url) {
+            imageUrl = image.image.url;
+          } else if (image.fullsize) {
+            imageUrl = image.fullsize;
+          } else if (image.thumb) {
+            imageUrl = image.thumb;
+          } else if (typeof image === 'string') {
+            // Sometimes the API just returns the URL as a string
+            imageUrl = image;
+          }
+
+          console.log('Found embed image URL:', imageUrl);
+
+          if (imageUrl) {
+            mediaHTML += `
+              <div class="bsky-image-container">
+                <img
+                  src="${imageUrl}"
+                  alt="${image.alt || ''}"
+                  class="bsky-image"
+                  loading="lazy"
+                  onerror="console.error('Failed to load image:', this.src)"
+                >
+                ${image.alt ? `<div class="bsky-image-alt">${image.alt}</div>` : ''}
+              </div>
+            `;
+          }
         });
 
         mediaHTML += '</div>';
@@ -60,7 +176,7 @@ class PostRenderer {
 
         mediaHTML += `
           <div class="bsky-card">
-            ${external.thumb ? `<img src="${external.thumb}" alt="${external.title || ''}" class="bsky-card-image">` : ''}
+            ${external.thumb ? `<img src="${external.thumb}" alt="${external.title || ''}" class="bsky-card-image" loading="lazy">` : ''}
             <div class="bsky-card-content">
               <div class="bsky-card-title">${external.title || ''}</div>
               ${external.description ? `<div class="bsky-card-description">${external.description}</div>` : ''}
@@ -83,7 +199,7 @@ class PostRenderer {
             <div class="bsky-quote">
               <div class="bsky-quote-author">
                 ${quoteAuthor.avatar ?
-                  `<img src="${quoteAuthor.avatar}" alt="${quoteAuthor.displayName || quoteAuthor.handle}" class="bsky-quote-avatar">` :
+                  `<img src="${quoteAuthor.avatar}" alt="${quoteAuthor.displayName || quoteAuthor.handle}" class="bsky-quote-avatar" loading="lazy">` :
                   ''
                 }
                 <div class="bsky-quote-author-info">
@@ -109,7 +225,7 @@ class PostRenderer {
             <div class="bsky-quote">
               <div class="bsky-quote-author">
                 ${quoteAuthor?.avatar ?
-                  `<img src="${quoteAuthor.avatar}" alt="${quoteAuthor.displayName || quoteAuthor.handle}" class="bsky-quote-avatar">` :
+                  `<img src="${quoteAuthor.avatar}" alt="${quoteAuthor.displayName || quoteAuthor.handle}" class="bsky-quote-avatar" loading="lazy">` :
                   ''
                 }
                 <div class="bsky-quote-author-info">
@@ -127,16 +243,37 @@ class PostRenderer {
           mediaHTML += '<div class="bsky-images">';
 
           post.embed.media.images.forEach(image => {
-            mediaHTML += `
-              <div class="bsky-image-container">
-                <img
-                  src="${image.fullsize || image.thumb}"
-                  alt="${image.alt || ''}"
-                  class="bsky-image"
-                >
-                ${image.alt ? `<div class="bsky-image-alt">${image.alt}</div>` : ''}
-              </div>
-            `;
+            // Ensure we have the right image URL by checking all possible locations
+            let imageUrl = '';
+
+            // Latest API puts image URL in image.image.url
+            if (image.image && image.image.url) {
+              imageUrl = image.image.url;
+            } else if (image.fullsize) {
+              imageUrl = image.fullsize;
+            } else if (image.thumb) {
+              imageUrl = image.thumb;
+            } else if (typeof image === 'string') {
+              // Sometimes the API just returns the URL as a string
+              imageUrl = image;
+            }
+
+            console.log('Found media image URL:', imageUrl);
+
+            if (imageUrl) {
+              mediaHTML += `
+                <div class="bsky-image-container">
+                  <img
+                    src="${imageUrl}"
+                    alt="${image.alt || ''}"
+                    class="bsky-image"
+                    loading="lazy"
+                    onerror="console.error('Failed to load image:', this.src)"
+                  >
+                  ${image.alt ? `<div class="bsky-image-alt">${image.alt}</div>` : ''}
+                </div>
+              `;
+            }
           });
 
           mediaHTML += '</div>';
@@ -145,7 +282,7 @@ class PostRenderer {
 
           mediaHTML += `
             <div class="bsky-card">
-              ${external.thumb ? `<img src="${external.thumb}" alt="${external.title || ''}" class="bsky-card-image">` : ''}
+              ${external.thumb ? `<img src="${external.thumb}" alt="${external.title || ''}" class="bsky-card-image" loading="lazy">` : ''}
               <div class="bsky-card-content">
                 <div class="bsky-card-title">${external.title || ''}</div>
                 ${external.description ? `<div class="bsky-card-description">${external.description}</div>` : ''}
@@ -155,11 +292,153 @@ class PostRenderer {
           `;
         }
       }
+
+      // Check for media in nested record structure
+      if (post.record && post.record.embed) {
+        console.log('Found media in post.record.embed with type:', post.record.embed.$type);
+
+        // Handle images in record.embed for the newest API format
+        if (post.record.embed.$type === 'app.bsky.embed.images#main') {
+          mediaHTML += '<div class="bsky-images">';
+
+          // In the #main format, need to look for blob references
+          if (post.record.embed.images && Array.isArray(post.record.embed.images)) {
+            // Find all blobs in the post
+            const blobs = {};
+
+            // Extract blob references from the post
+            if (post.blobs && Array.isArray(post.blobs)) {
+              post.blobs.forEach(blob => {
+                if (blob.$type === 'blob' && blob.ref) {
+                  blobs[blob.ref] = blob.mimeType ? `data:${blob.mimeType};base64,${blob.data}` : blob.data;
+                }
+              });
+            }
+
+            // Now render each image
+            post.record.embed.images.forEach((img, i) => {
+              let imageUrl = '';
+
+              // Try to find the image data in blobs if it has a reference
+              if (img.image && img.image.ref && blobs[img.image.ref]) {
+                imageUrl = blobs[img.image.ref];
+              } else if (img.image && img.image.url) {
+                imageUrl = img.image.url;
+              }
+
+              console.log(`Found blob image URL for image ${i}:`, imageUrl);
+
+              if (imageUrl) {
+                mediaHTML += `
+                  <div class="bsky-image-container">
+                    <img
+                      src="${imageUrl}"
+                      alt="${img.alt || ''}"
+                      class="bsky-image"
+                      loading="lazy"
+                      onerror="console.error('Failed to load image:', this.src)"
+                    >
+                    ${img.alt ? `<div class="bsky-image-alt">${img.alt}</div>` : ''}
+                  </div>
+                `;
+              }
+            });
+          }
+
+          mediaHTML += '</div>';
+        }
+        // Handle images in the standard record.embed format
+        else if (post.record.embed.$type === 'app.bsky.embed.images') {
+          mediaHTML += '<div class="bsky-images">';
+
+          post.record.embed.images.forEach(image => {
+            // Ensure we have the right image URL by checking all possible locations
+            let imageUrl = '';
+
+            // Latest API puts image URL in image.image.url
+            if (image.image && image.image.url) {
+              imageUrl = image.image.url;
+            } else if (image.fullsize) {
+              imageUrl = image.fullsize;
+            } else if (image.thumb) {
+              imageUrl = image.thumb;
+            } else if (typeof image === 'string') {
+              // Sometimes the API just returns the URL as a string
+              imageUrl = image;
+            }
+
+            console.log('Found image URL:', imageUrl);
+
+            if (imageUrl) {
+              mediaHTML += `
+                <div class="bsky-image-container">
+                  <img
+                    src="${imageUrl}"
+                    alt="${image.alt || ''}"
+                    class="bsky-image"
+                    loading="lazy"
+                    onerror="console.error('Failed to load image:', this.src)"
+                  >
+                  ${image.alt ? `<div class="bsky-image-alt">${image.alt}</div>` : ''}
+                </div>
+              `;
+            }
+          });
+
+          mediaHTML += '</div>';
+        }
+
+        // Handle other record.embed types as needed
+        // ...similar code for other embed types...
+      }
+
+      // Also check for images in slightly different API structures
+      if (!mediaHTML && post.embed && post.embed.images && Array.isArray(post.embed.images)) {
+        mediaHTML += '<div class="bsky-images">';
+
+        post.embed.images.forEach(image => {
+          // Ensure we have the right image URL by checking all possible locations
+          let imageUrl = '';
+
+          // Latest API puts image URL in image.image.url
+          if (image.image && image.image.url) {
+            imageUrl = image.image.url;
+          } else if (image.fullsize) {
+            imageUrl = image.fullsize;
+          } else if (image.thumb) {
+            imageUrl = image.thumb;
+          } else if (image.url) {
+            imageUrl = image.url;
+          } else if (typeof image === 'string') {
+            // Sometimes the API just returns the URL as a string
+            imageUrl = image;
+          }
+
+          console.log('Found general image URL:', imageUrl);
+
+          if (imageUrl) {
+            mediaHTML += `
+              <div class="bsky-image-container">
+                <img
+                  src="${imageUrl}"
+                  alt="${image.alt || ''}"
+                  class="bsky-image"
+                  loading="lazy"
+                  onerror="console.error('Failed to load image:', this.src)"
+                >
+                ${image.alt ? `<div class="bsky-image-alt">${image.alt}</div>` : ''}
+              </div>
+            `;
+          }
+        });
+
+        mediaHTML += '</div>';
+      }
     } catch (error) {
       console.error('Error generating media HTML:', error);
       // Return empty string in case of error
     }
-    
+
     return mediaHTML;
   }
 
@@ -171,7 +450,7 @@ class PostRenderer {
     const secondaryTextColor = isDark ? '#8899a6' : '#657786';
     const borderColor = isDark ? '#38444d' : '#e1e8ed';
     const linkColor = isDark ? '#1d9bf0' : '#1da1f2';
-    
+
     return `
       .bsky-embed {
         border: 1px solid ${borderColor};
@@ -181,105 +460,152 @@ class PostRenderer {
         background-color: ${backgroundColor};
         color: ${textColor};
       }
-      
+
       .bsky-content {
         padding: 16px;
       }
-      
+
       .bsky-author {
         display: flex;
         align-items: center;
         margin-bottom: 12px;
       }
-      
+
       .bsky-avatar {
         width: 48px;
         height: 48px;
         border-radius: 50%;
         margin-right: 10px;
+        object-fit: cover;
       }
-      
+
       .bsky-author-info {
         display: flex;
         flex-direction: column;
       }
-      
+
       .bsky-author-name {
         font-weight: bold;
         color: ${textColor};
       }
-      
+
       .bsky-author-handle {
         color: ${secondaryTextColor};
       }
-      
+
       .bsky-post-text {
         margin-bottom: 12px;
         white-space: pre-wrap;
         word-break: break-word;
       }
-      
+
       .bsky-post-date {
         color: ${secondaryTextColor};
         font-size: 14px;
         margin-bottom: 12px;
       }
-      
+
       .bsky-link, .bsky-mention {
         color: ${linkColor};
         text-decoration: none;
       }
-      
+
       .bsky-link:hover, .bsky-mention:hover {
         text-decoration: underline;
       }
-      
+
+      /* Media display - updated for better image rendering */
       .bsky-images {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 8px;
         margin-bottom: 12px;
+        width: 100%;
       }
-      
+
+      /* Single image layout */
+      .bsky-images:has(.bsky-image-container:only-child) {
+        grid-template-columns: 1fr;
+      }
+
+      /* 2 images layout */
+      .bsky-images:has(.bsky-image-container:first-child:nth-last-child(2)) {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      /* 3 images layout */
+      .bsky-images:has(.bsky-image-container:first-child:nth-last-child(3)) {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      /* 4 images layout */
+      .bsky-images:has(.bsky-image-container:first-child:nth-last-child(4)) {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+      }
+
+      /* Fallback for browsers that don't support :has() */
+      @supports not (selector(:has(*))) {
+        .bsky-images {
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
+      }
+
+      .bsky-image-container {
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+        margin-bottom: 8px;
+        max-height: 600px;
+      }
+
       .bsky-image {
         width: 100%;
+        max-width: 100%;
+        height: auto;
+        object-fit: contain;
         border-radius: 8px;
-        margin-bottom: 4px;
+        display: block;
       }
-      
+
       .bsky-image-alt {
         color: ${secondaryTextColor};
         font-size: 12px;
+        margin-top: 6px;
+        margin-bottom: 12px;
+        line-height: 1.4;
+        max-height: 80px;
+        overflow-y: auto;
+        padding-right: 10px;
       }
-      
+
       .bsky-card {
         border: 1px solid ${borderColor};
         border-radius: 8px;
         margin-bottom: 12px;
         overflow: hidden;
       }
-      
+
       .bsky-card-image {
         width: 100%;
         max-height: 250px;
         object-fit: cover;
       }
-      
+
       .bsky-card-content {
         padding: 12px;
       }
-      
+
       .bsky-card-title {
         font-weight: bold;
         margin-bottom: 4px;
       }
-      
+
       .bsky-card-description {
         color: ${secondaryTextColor};
         margin-bottom: 8px;
         font-size: 14px;
       }
-      
+
       .bsky-card-link {
         color: ${secondaryTextColor};
         font-size: 14px;
@@ -289,44 +615,47 @@ class PostRenderer {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      
+
       .bsky-quote {
         border: 1px solid ${borderColor};
         border-radius: 8px;
         margin-bottom: 12px;
         padding: 12px;
       }
-      
+
       .bsky-quote-author {
         display: flex;
         align-items: center;
         margin-bottom: 8px;
       }
-      
+
       .bsky-quote-avatar {
         width: 20px;
         height: 20px;
         border-radius: 50%;
         margin-right: 8px;
+        object-fit: cover;
       }
-      
+
       .bsky-quote-author-name {
         font-weight: bold;
       }
-      
+
       .bsky-quote-author-handle {
         color: ${secondaryTextColor};
         margin-left: 4px;
       }
-      
+
       .bsky-quote-content {
         white-space: pre-wrap;
+        word-break: break-word;
       }
-      
+
       .bsky-footer {
         text-align: right;
+        margin-top: 12px;
       }
-      
+
       .bsky-footer-link {
         color: ${linkColor};
         text-decoration: none;
@@ -340,10 +669,13 @@ class PostRenderer {
     const { width = this.defaultWidth, theme = this.defaultTheme } = options;
 
     try {
+      // Debug the post structure to understand what we're working with
+      console.log('Rendering post with structure keys:', Object.keys(post).join(', '));
+
       // Extract post information - adapted for new API structure
-      const authorName = post.author.displayName || post.author.handle;
-      const authorHandle = post.author.handle;
-      const authorAvatar = post.author.avatar || '';  // Add fallback for missing avatar
+      const authorName = post.author?.displayName || post.author?.handle || 'Unknown User';
+      const authorHandle = post.author?.handle || 'unknown.user';
+      const authorAvatar = post.author?.avatar || '';  // Add fallback for missing avatar
 
       // Handle post text - can be in different locations in the API
       let postText = '';
@@ -353,28 +685,37 @@ class PostRenderer {
         postText = post.text;
       } else if (post.value && post.value.text) {
         postText = post.value.text;
+      } else if (post.record && post.record.value && post.record.value.text) {
+        postText = post.record.value.text;
       }
 
-      // Handle dates
+      // Handle dates with multiple fallbacks
       let postDate;
       try {
-        postDate = new Date(post.indexedAt || post.createdAt || Date.now()).toLocaleString();
+        const dateString = post.indexedAt || post.createdAt ||
+                          post.record?.createdAt || post.record?.indexedAt ||
+                          Date.now().toString();
+        postDate = new Date(dateString).toLocaleString();
       } catch (e) {
+        console.error('Error parsing date:', e);
         postDate = 'Unknown date';
       }
 
       // URLs for the post and author
       const authorUrl = `https://bsky.app/profile/${authorHandle}`;
 
-      // For post URL, safely extract the ID
-      let postId;
+      // For post URL, safely extract the ID with multiple fallbacks
+      let postId = '';
       if (post.uri) {
         const uriParts = post.uri.split('/');
         postId = uriParts[uriParts.length - 1];
       } else if (post.cid) {
         postId = post.cid;
-      } else {
-        postId = '';
+      } else if (post.id) {
+        postId = post.id;
+      } else if (post.record && post.record.uri) {
+        const uriParts = post.record.uri.split('/');
+        postId = uriParts[uriParts.length - 1];
       }
 
       const postUrl = `https://bsky.app/profile/${authorHandle}/post/${postId}`;
@@ -382,7 +723,13 @@ class PostRenderer {
       // Render CSS and HTML
       const css = this.generateCSS(theme);
       const formattedText = this.formatPostText(postText);
+
+      // Generate media HTML and log if none was found
       const mediaHTML = this.generateMediaHTML(post, theme);
+      if (!mediaHTML && (post.embed || post.record?.embed)) {
+        console.log('No media HTML was generated despite embed data being present');
+        console.log('Embed type:', post.embed?.$type || post.record?.embed?.$type);
+      }
 
       return `
         <div class="bsky-embed-container" style="max-width: ${width};">
@@ -391,7 +738,8 @@ class PostRenderer {
             <div class="bsky-content">
               <div class="bsky-author">
                 <a href="${authorUrl}" target="_blank" rel="noopener noreferrer">
-                  <img src="${authorAvatar}" alt="${authorName}" class="bsky-avatar">
+                  <img src="${authorAvatar}" alt="${authorName}" class="bsky-avatar" loading="lazy"
+                       onerror="this.src='/img/default-avatar.svg'">
                 </a>
                 <div class="bsky-author-info">
                   <a href="${authorUrl}" target="_blank" rel="noopener noreferrer" class="bsky-author-link">
@@ -413,7 +761,8 @@ class PostRenderer {
         </div>
       `;
     } catch (error) {
-      console.error('Error rendering post:', error, post);
+      console.error('Error rendering post:', error);
+      console.error('Post object structure:', post ? JSON.stringify(Object.keys(post)) : 'null post');
 
       // Provide a fallback rendering for posts that can't be properly parsed
       return `
@@ -423,10 +772,14 @@ class PostRenderer {
             <div class="bsky-content">
               <div style="padding: 20px; text-align: center;">
                 <p>This Bluesky post couldn't be displayed properly.</p>
-                ${post.uri ? `<a href="https://bsky.app/profile/handle/post/${post.uri.split('/').pop()}"
-                  target="_blank" rel="noopener noreferrer" class="bsky-footer-link">
-                  View on Bluesky
-                </a>` : ''}
+                ${post?.uri ?
+                  `<a href="https://bsky.app/profile/${post.author?.handle || 'handle'}/post/${post.uri.split('/').pop()}"
+                    target="_blank" rel="noopener noreferrer" class="bsky-footer-link">
+                    View on Bluesky
+                  </a>`
+                :
+                  '<p>The post information was incomplete or could not be parsed.</p>'
+                }
               </div>
             </div>
           </div>
@@ -444,8 +797,14 @@ class PostRenderer {
 
       // Get the author handle with a fallback
       let authorHandle = 'bluesky-user';
-      if (post.author && post.author.handle) {
-        authorHandle = post.author.handle;
+      let authorName = 'Bluesky User';
+      if (post.author) {
+        if (post.author.handle) {
+          authorHandle = post.author.handle;
+        }
+        if (post.author.displayName) {
+          authorName = post.author.displayName;
+        }
       }
 
       return `
@@ -455,6 +814,17 @@ class PostRenderer {
           <title>Bluesky Post by @${authorHandle}</title>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
+          <link rel="icon" href="/img/favicon.png" type="image/png">
+          <meta property="og:title" content="Post by ${authorName} (@${authorHandle})">
+          <meta property="og:site_name" content="Bluesky">
+          <meta property="og:type" content="article">
+          <meta property="og:description" content="${
+            post.record?.text || post.text || 'Bluesky post'
+          }">
+          ${post.author?.avatar ?
+            `<meta property="og:image" content="${post.author.avatar}">` :
+            ''
+          }
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -464,10 +834,23 @@ class PostRenderer {
               display: flex;
               justify-content: center;
             }
+
+            .container {
+              max-width: ${width === '100%' ? '600px' : width};
+              width: 100%;
+            }
+
+            @media (max-width: 600px) {
+              body {
+                padding: 10px;
+              }
+            }
           </style>
         </head>
         <body>
-          ${postHTML}
+          <div class="container">
+            ${postHTML}
+          </div>
         </body>
         </html>
       `;
@@ -482,6 +865,7 @@ class PostRenderer {
           <title>Bluesky Post</title>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
+          <link rel="icon" href="/img/favicon.png" type="image/png">
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -495,6 +879,7 @@ class PostRenderer {
             }
             .error-container {
               max-width: 500px;
+              width: 100%;
               padding: 30px;
               background-color: ${theme === 'dark' ? '#15202b' : '#ffffff'};
               border-radius: 12px;
