@@ -9,6 +9,7 @@ module.exports = {
   bluesky: {
     service: process.env.BSKY_SERVICE_URL || 'https://bsky.social',
     username: process.env.BSKY_USERNAME || null,
+    did: process.env.BSKY_DID || null, // DID for the configured username
     appPassword: process.env.BSKY_APP_PASSWORD || null,
   },
   

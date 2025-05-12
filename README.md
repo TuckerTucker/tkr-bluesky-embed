@@ -122,6 +122,41 @@ BSKY_USERNAME=tucker.sh
 BSKY_APP_PASSWORD=your-app-password
 ```
 
+## API Version
+
+This application uses the Bluesky/AT Protocol API version 0.15.6. It includes special handling for:
+- Required `actor` parameter in API requests
+- Updated response formats
+- Proper error handling for API responses
+
+## Troubleshooting
+
+If you encounter issues:
+
+### 1. Authentication Problems
+
+- Check that your username doesn't include the `@` symbol in the .env file
+- Verify that your app password is correct
+- Make sure your Bluesky account is in good standing
+
+### 2. API Errors (502, 429)
+
+- The Bluesky API may be experiencing issues or rate limiting
+- Try again later or reduce the number of requests
+- Check the console logs for detailed error information
+
+### 3. Post Display Issues
+
+- If posts aren't rendering correctly, check if the post has been deleted or is private
+- For feed issues, try viewing a single post to confirm basic connectivity
+- Enable authentication for better performance and access to more posts
+
+### 4. Custom Domain Handles
+
+Custom domain handles (like @tucker.sh) are fully supported:
+- In the .env file, enter only the domain without the @ symbol
+- In API requests, you can use either format (@tucker.sh or tucker.sh)
+
 ## License
 
 MIT License
